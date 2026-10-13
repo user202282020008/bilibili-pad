@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "B站手柄倍速",
+  "version": "1.0.0",
+  "description": "用手柄扳机（LT / RT）的按压力度实时控制 B 站视频倍速；方向键调音量与默认倍速，肩键暂停 / 字幕，X / Y 宽屏 / 全屏。",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": [
+    "https://*.bilibili.com/*",
+    "https://bilibili.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "B站手柄倍速",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.bilibili.com/*",
+        "https://bilibili.com/*"
+      ],
+      "js": [
+        "src/00-core.js",
+        "src/10-config.js",
+        "src/20-hud.js",
+        "src/30-player.js",
+        "src/40-gamepad.js",
+        "src/50-actions.js",
+        "src/90-app.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

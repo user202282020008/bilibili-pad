@@ -1,0 +1,12 @@
+# 私钥 / 打包产物
+*.pem
+*.crx
+*.zip
+
+# 开发辅助产物（截图、临时 profile）
+tools/preview/
+
+# 系统与依赖
+node_modules/
+.DS_Store
+Thumbs.db
