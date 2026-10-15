@@ -78,6 +78,15 @@ function makeCtx(overrides) {
     toastLeaves.push(inner);
     return { box, inner };
   }
+  // 弹幕开关桩：模拟 B 站三档循环开关（bui-danmaku-switch-state-1/2/3），
+  // 真实页面里只有内层 checkbox 的 click 有效（点外层 div / label 不生效）
+  const dm = { st: 1, clicks: 0 };
+  dm.input = { click() { dm.clicks++; dm.st = (dm.st % 3) + 1; } };
+  dm.sw = {
+    get className() { return 'bpx-player-dm-switch bui bui-danmaku-switch bui-danmaku-switch-state-' + dm.st; },
+    querySelector: (sel) => (String(sel).indexOf('bui-danmaku-switch-input') >= 0 ? dm.input : null),
+  };
+
   const document = {
     body, head,
     documentElement: new El('html'),
@@ -85,6 +94,7 @@ function makeCtx(overrides) {
     getElementById: () => null,
     // 只有宽屏 / 全屏按钮会返回桩对象（X / Y 键用）；字幕按钮默认不存在
     querySelector: (sel) => {
+      if (typeof sel === 'string' && /bpx-player-dm-switch/.test(sel)) return dm.sw;
       if (typeof sel === 'string' && /ctrl-(wide|full)|btn-(wide|full)/.test(sel)) {
         ctrl[sel] = ctrl[sel] || { clicks: 0, click() { this.clicks++; } };
         return ctrl[sel];
@@ -214,7 +224,7 @@ function makeCtx(overrides) {
   vm.runInContext(code, ctx);
 
   return {
-    ctx, video, pad, stats, ctrl, subEls, otherEls, setSubItems, subClicks, setSubToast, setSubApi,
+    ctx, video, pad, dm, stats, ctrl, subEls, otherEls, setSubItems, subClicks, setSubToast, setSubApi,
     getSubMenuOpens: () => subMenuOpens,
     msg: ctx.chrome.runtime.onMessage,
     step(ms) {
@@ -734,6 +744,8 @@ run('HUD 提示文字都放得进固定宽度（不会撑开 / 截断）', () =>
   tap(5);     // 字幕
   tap(2);     // 宽屏
   tap(3);     // 全屏
+  tap(11);    // 弹幕：关
+  tap(11);    // 弹幕：开
   if (notes.size < 6) throw new Error('收集到的提示太少：' + [...notes].join(' | '));
   for (const n of notes) {
     if (cols(n) > 20) throw new Error("提示过长会跳尺寸（" + cols(n) + " 列）：" + n);
@@ -916,6 +928,47 @@ run('提示显示当前步长；位置被夹取时步长不变', () => {
   if (note !== '快退 5s · 0:00') throw new Error('提示不对：' + note);
   tap(0);                                          // -6 → 夹到 0
   if (note !== '快退 6s · 0:00') throw new Error('提示不对：' + note);
+});
+
+run('R3 弹幕开关：全开 ⇄ 关，跳过中间档', () => {
+  const t = makeCtx();
+  let note = '';
+  const orig = t.ctx.setHud;
+  t.ctx.setHud = (visible, speed, lt, rt, padText) => { if (padText) note = padText; return orig(visible, speed, lt, rt, padText); };
+  t.step(16); t.step(16);
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  if (t.dm.st !== 1) throw new Error('初始档位不对：' + t.dm.st);
+  tap(11);                                 // 全屏档 → 连点两下直达关（跳过半屏档）
+  if (t.dm.clicks !== 2 || t.dm.st !== 3) throw new Error('未跳过半屏档：clicks=' + t.dm.clicks + ' st=' + t.dm.st);
+  if (note !== '弹幕：关') throw new Error('提示不对：' + note);
+  tap(11);                                 // 关 → 一下回到全屏档
+  if (t.dm.clicks !== 3 || t.dm.st !== 1) throw new Error('未回到全屏档：clicks=' + t.dm.clicks + ' st=' + t.dm.st);
+  if (note !== '弹幕：开') throw new Error('提示不对：' + note);
+});
+
+run('R3 按住不重复', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.pad.buttons[11].pressed = true;
+  for (let i = 0; i < 60; i++) t.step(16);
+  if (t.dm.clicks !== 2 || t.dm.st !== 3) throw new Error('按住连发了：clicks=' + t.dm.clicks + ' st=' + t.dm.st);
+});
+
+run('关闭 R3 弹幕开关后不响应', () => {
+  const t = makeCtx({ r3Dm: false });
+  t.step(16); t.step(16);
+  t.pad.buttons[11].pressed = true; t.step(16);
+  t.pad.buttons[11].pressed = false; t.step(16);
+  if (t.dm.clicks !== 0 || t.dm.st !== 1) throw new Error('关闭后仍切换：clicks=' + t.dm.clicks);
+});
+
+run('中间档（半屏）按 R3 一键关', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.dm.st = 2;                             // 模拟用户自己用鼠标切到了半屏档
+  t.pad.buttons[11].pressed = true; t.step(16);
+  t.pad.buttons[11].pressed = false; t.step(16);
+  if (t.dm.st !== 3 || t.dm.clicks !== 1) throw new Error('半屏档未一键关闭：st=' + t.dm.st + ' clicks=' + t.dm.clicks);
 });
 
 run('切换字幕后抹掉 B 站自己的「字幕已切换至 xx」提示', async () => {

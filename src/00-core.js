@@ -27,6 +27,7 @@ const DEFAULTS = {
   abSeek: true,      // A / B 键 快退 / 快进（首次 5 秒，1 秒内连按递增）
   lbPause: true,     // 左肩键 L1 暂停 / 继续
   rbSub: true,       // 右肩键 R1 循环切换字幕
+  r3Dm: true,        // R3 开关弹幕（全开 / 关，跳过原生开关的半屏档）
   xWide: true,       // X 键开关宽屏
   yFull: true,       // Y 键开关全屏
   yCycle: false,     // Y 键循环四种播放模式（默认/宽屏/网页全屏/全屏），替代全屏开关
@@ -118,7 +119,7 @@ let lastActivity = -1e9;
 
 let volDir = 0, volNext = 0;
 let rateDir = 0;
-let lbPrev = false, rbPrev = false, xPrev = false, yPrev = false, aPrev = false, bPrev = false;
+let lbPrev = false, rbPrev = false, xPrev = false, yPrev = false, aPrev = false, bPrev = false, r3Prev = false;
 // A / B 连按链：当前步长 / 上次按下时刻（两键各自独立）
 let aSeekStep = 0, aSeekAt = -1e9;
 let bSeekStep = 0, bSeekAt = -1e9;

@@ -18,6 +18,7 @@ const DEFAULTS = {
   abSeek: true,
   lbPause: true,
   rbSub: true,
+  r3Dm: true,
   xWide: true,
   yFull: true,
   yCycle: false,

@@ -454,7 +454,32 @@ function cycleViewMode(now) {
   flash('播放模式：' + VIEW_NAMES[next], now);
 }
 
-// X / Y：按下沿触发，按住不重复
+// ---------------------------------------------------------------- 弹幕开关（R3）
+// 实机探针（2026-10）：B 站弹幕开关是三档循环（全屏弹幕 → 半屏弹幕 → 关），
+// 只有内层 checkbox 的 click 有效（点外层 div / label 都不生效），且档位类名同步更新。
+// R3 只做「全屏 ⇄ 关」两态切换：在任意档按一下要么直接关、要么回到全屏档，跳过中间档。
+const DM_SWITCH = '.bpx-player-dm-switch';
+const DM_INPUT = 'input.bui-danmaku-switch-input';
+
+function dmState(sw) {
+  const m = (sw.className || '').match(/bui-danmaku-switch-state-(\d)/);
+  return m ? Number(m[1]) : 0;   // 0 = 类名不认识
+}
+
+function toggleDanmaku() {
+  let sw = null;
+  try { sw = document.querySelector(DM_SWITCH); } catch (e) { /* ignore */ }
+  const input = sw && sw.querySelector(DM_INPUT);
+  if (!input) return null;
+  const cur = dmState(sw);
+  if (!cur) return null;                 // 播放器换了样式：宁可不点，也不乱点
+  const want = cur === 3 ? 1 : 3;        // 关 → 全屏档；全屏 / 半屏 → 关
+  for (let i = 0; i < 2 && dmState(sw) !== want; i++) input.click();
+  const now = dmState(sw);
+  return now === 1 ? '弹幕：开' : now === 3 ? '弹幕：关' : null;
+}
+
+// X / Y / R3：按下沿触发，按住不重复
 function handleKeys(pad, now) {
   const x = !!(pad && cfg.xWide && pressed(pad, PAD.X));
   if (x && !xPrev) { const t = toggleWide(); if (t) flash(t, now); }
@@ -466,4 +491,8 @@ function handleKeys(pad, now) {
     else { const t = toggleFullscreen(); if (t) flash(t, now); }
   }
   yPrev = y;
+
+  const r3 = !!(pad && cfg.r3Dm && pressed(pad, PAD.R3));
+  if (r3 && !r3Prev) { const t = toggleDanmaku(); if (t) flash(t, now); }
+  r3Prev = r3;
 }
