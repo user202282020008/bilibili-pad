@@ -46,7 +46,7 @@ function setBaseRate(v) {
 }
 
 // ---------------------------------------------------------------- 快退 / 快进
-// A / B：±10 秒，按下沿触发，按住不重复
+// A / B：快退 / 快进，首次 ±5 秒，1 秒内连按每次递增 1 秒（各自独立）；按下沿触发，按住不重复
 function fmtTime(t) {
   const s = Math.max(0, Math.floor(t));
   const h = Math.floor(s / 3600);
@@ -65,11 +65,19 @@ function seekBy(delta, now) {
 
 function handleSeek(pad, now) {
   const a = !!(pad && cfg.abSeek && pressed(pad, PAD.A));
-  if (a && !aPrev) seekBy(-SEEK_STEP, now);
+  if (a && !aPrev) {
+    aSeekStep = now - aSeekAt > SEEK_CHAIN_WINDOW ? SEEK_STEP_FIRST : aSeekStep + SEEK_STEP_GROWTH;
+    aSeekAt = now;
+    seekBy(-aSeekStep, now);
+  }
   aPrev = a;
 
   const b = !!(pad && cfg.abSeek && pressed(pad, PAD.B));
-  if (b && !bPrev) seekBy(SEEK_STEP, now);
+  if (b && !bPrev) {
+    bSeekStep = now - bSeekAt > SEEK_CHAIN_WINDOW ? SEEK_STEP_FIRST : bSeekStep + SEEK_STEP_GROWTH;
+    bSeekAt = now;
+    seekBy(bSeekStep, now);
+  }
   bPrev = b;
 }
 

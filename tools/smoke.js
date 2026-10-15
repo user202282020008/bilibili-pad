@@ -782,13 +782,13 @@ run('弹窗 ping 时内容脚本会回应（弹窗据此判断是否需要补注
   if (!reply || reply.ok !== true) throw new Error('未回应或回应错误：' + JSON.stringify(reply));
 });
 
-run('A 键快退 10s / B 键快进 10s', () => {
+run('A / B 首次快退 / 快进 5s', () => {
   const t = makeCtx();
   t.step(16); t.step(16);
   t.video.currentTime = 30;
   const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
-  tap(0);   // A → 20
-  if (t.video.currentTime !== 20) throw new Error('快退失败：' + t.video.currentTime);
+  tap(0);   // A → 25
+  if (t.video.currentTime !== 25) throw new Error('快退失败：' + t.video.currentTime);
   tap(1);   // B → 30
   if (t.video.currentTime !== 30) throw new Error('快进失败：' + t.video.currentTime);
 });
@@ -811,7 +811,7 @@ run('A / B 按住不连发', () => {
   t.video.currentTime = 50;
   t.pad.buttons[1].pressed = true;
   for (let i = 0; i < 60; i++) t.step(16);
-  if (t.video.currentTime !== 60) throw new Error('按住连发了：' + t.video.currentTime);
+  if (t.video.currentTime !== 55) throw new Error('按住连发了：' + t.video.currentTime);
 });
 
 run('关闭「A / B 快退快进」后不响应', () => {
@@ -831,6 +831,91 @@ run('时长未知（直播）时 A / B 不动', () => {
   t.video.currentTime = 50;
   t.pad.buttons[1].pressed = true; t.step(16);
   if (t.video.currentTime !== 50) throw new Error('不该跳转：' + t.video.currentTime);
+});
+
+run('B 键连按步长递增：+5 / +6 / +7 秒', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 0;
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  tap(1); if (t.video.currentTime !== 5) throw new Error('第 1 次：' + t.video.currentTime);
+  tap(1); if (t.video.currentTime !== 11) throw new Error('第 2 次：' + t.video.currentTime);
+  tap(1); if (t.video.currentTime !== 18) throw new Error('第 3 次：' + t.video.currentTime);
+});
+
+run('A 键连按步长递增：-5 / -6 / -7 秒', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 50;
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  tap(0); if (t.video.currentTime !== 45) throw new Error('第 1 次：' + t.video.currentTime);
+  tap(0); if (t.video.currentTime !== 39) throw new Error('第 2 次：' + t.video.currentTime);
+  tap(0); if (t.video.currentTime !== 32) throw new Error('第 3 次：' + t.video.currentTime);
+});
+
+run('A / B 连按计数相互独立', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 20;
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  tap(1); if (t.video.currentTime !== 25) throw new Error('B1：' + t.video.currentTime);   // +5
+  tap(1); if (t.video.currentTime !== 31) throw new Error('B2：' + t.video.currentTime);   // +6
+  tap(0); if (t.video.currentTime !== 26) throw new Error('A1：' + t.video.currentTime);   // -5
+  tap(0); if (t.video.currentTime !== 20) throw new Error('A2：' + t.video.currentTime);   // -6
+  tap(1); if (t.video.currentTime !== 27) throw new Error('B3：' + t.video.currentTime);   // +7，A 未打断 B 的链
+});
+
+run('连按间隔超过 1 秒 → 步长重置回 5 秒', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 0;
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  tap(1);          // 0 → 5
+  tap(1);          // → 11（第 2 次 +6，确认链生效）
+  t.step(1100);    // 空闲超过 1 秒
+  tap(1);          // 重置 → +5 → 16（未重置则是 +7 → 18）
+  if (t.video.currentTime !== 16) throw new Error('超时未重置：' + t.video.currentTime);
+});
+
+run('连按间隔恰好 1000ms → 继续递增（不重置）', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 0;
+  t.pad.buttons[1].pressed = true; t.step(16);     // 第 1 次按下沿 → +5 → 5
+  t.pad.buttons[1].pressed = false; t.step(16);
+  t.step(1000 - 32);                               // 下一次按下沿正好距上次 1000ms
+  t.pad.buttons[1].pressed = true; t.step(16);
+  if (t.video.currentTime !== 11) throw new Error('恰好 1000ms 被重置：' + t.video.currentTime);
+});
+
+run('连按间隔 1001ms → 重置回 5 秒', () => {
+  const t = makeCtx();
+  t.step(16); t.step(16);
+  t.video.currentTime = 0;
+  t.pad.buttons[1].pressed = true; t.step(16);     // 第 1 次 → +5 → 5
+  t.pad.buttons[1].pressed = false; t.step(16);
+  t.step(1001 - 32);
+  t.pad.buttons[1].pressed = true; t.step(16);
+  if (t.video.currentTime !== 10) throw new Error('超过 1 秒未重置：' + t.video.currentTime);
+});
+
+run('提示显示当前步长；位置被夹取时步长不变', () => {
+  const t = makeCtx();
+  let note = '';
+  const orig = t.ctx.setHud;
+  t.ctx.setHud = (visible, speed, lt, rt, padText) => { if (padText) note = padText; return orig(visible, speed, lt, rt, padText); };
+  t.step(16); t.step(16);
+  const tap = (idx) => { t.pad.buttons[idx].pressed = true; t.step(16); t.pad.buttons[idx].pressed = false; t.step(16); };
+  t.video.currentTime = 95;                        // 时长 100
+  tap(1);                                          // +5 → 夹到 100
+  if (note !== '快进 5s · 1:40') throw new Error('提示不对：' + note);
+  tap(1);                                          // +6 → 仍夹在 100，但步长是 6
+  if (note !== '快进 6s · 1:40') throw new Error('提示不对：' + note);
+  t.video.currentTime = 5;
+  tap(0);                                          // -5 → 0
+  if (note !== '快退 5s · 0:00') throw new Error('提示不对：' + note);
+  tap(0);                                          // -6 → 夹到 0
+  if (note !== '快退 6s · 0:00') throw new Error('提示不对：' + note);
 });
 
 run('切换字幕后抹掉 B 站自己的「字幕已切换至 xx」提示', async () => {

@@ -24,7 +24,7 @@ const DEFAULTS = {
   swap: false,       // 交换 LT / RT
   dpadVol: true,     // 方向键上/下调音量
   dpadRate: true,    // 方向键左/右调默认倍速（每次 0.25）
-  abSeek: true,      // A / B 键 快退 / 快进 10 秒
+  abSeek: true,      // A / B 键 快退 / 快进（首次 5 秒，1 秒内连按递增）
   lbPause: true,     // 左肩键 L1 暂停 / 继续
   rbSub: true,       // 右肩键 R1 循环切换字幕
   xWide: true,       // X 键开关宽屏
@@ -37,7 +37,9 @@ const DEFAULTS = {
 // ---------------------------------------------------------------- 常量
 const VOL_STEP = 0.05;    // 方向键 ↑↓ 每次调整的音量
 const RATE_STEP = 0.25;   // 方向键 ←→ 每次调整的默认倍速量
-const SEEK_STEP = 10;     // A / B 键每次快退 / 快进的秒数
+const SEEK_STEP_FIRST = 5;      // A / B 键首次快退 / 快进的秒数
+const SEEK_STEP_GROWTH = 1;     // A / B 键连按一次步长的递增秒数（无上限）
+const SEEK_CHAIN_WINDOW = 1000; // A / B 连按间隔超过此毫秒数时步长重置
 const BASE_MIN = 0.25;    // 默认倍速下限（与弹窗一致）
 const BASE_MAX = 8;       // 默认倍速上限
 const MIN_RATE = 0.1;
@@ -117,6 +119,9 @@ let lastActivity = -1e9;
 let volDir = 0, volNext = 0;
 let rateDir = 0;
 let lbPrev = false, rbPrev = false, xPrev = false, yPrev = false, aPrev = false, bPrev = false;
+// A / B 连按链：当前步长 / 上次按下时刻（两键各自独立）
+let aSeekStep = 0, aSeekAt = -1e9;
+let bSeekStep = 0, bSeekAt = -1e9;
 let subStateLabel = '字幕：关';
 let subApplied = true, subTries = 0;   // 本轮挂载是否已恢复字幕状态
 let subToastSweep = 0;                 // 还有几帧要去清 B 站的「字幕已切换至 xx」提示
