@@ -126,6 +126,7 @@ function playerRoot() {
 let subData = undefined;      // { lans: [{lan, doc}], current } | undefined=未加载
 let subDataKey = null;        // 已加载的视频标识（bvid:p）
 let subDataLoading = false;
+let subLoadSeq = 0;           // 请求代次：SPA 切视频后丢弃旧视频的迟到响应
 
 function currentBvid() {
   return (location.pathname.match(/BV[0-9A-Za-z]+/) || [])[0] || null;
@@ -136,8 +137,13 @@ function resetSubState() {
   subData = undefined;
   subDataKey = null;
   subDataLoading = false;
+  subLoadSeq++;               // 让还在路上的旧请求作废
   subJob = null;
   subJobTries = 0;
+  subToastSweep = 0;
+  // 新视频也要恢复保存的字幕状态（等新轨道列表回来后再套用）
+  subApplied = cfg.subIndex < 0;
+  subTries = 0;
 }
 
 async function loadSubData() {
@@ -147,6 +153,7 @@ async function loadSubData() {
   const key = bvid + ':' + p;
   if (subData !== undefined && subDataKey === key) return;
   subDataLoading = true;
+  const seq = ++subLoadSeq;
   let out = { lans: [], current: '' };
   try {
     const vj = await (await fetch('https://api.bilibili.com/x/web-interface/view?bvid=' + bvid, { credentials: 'include' })).json();
@@ -163,6 +170,7 @@ async function loadSubData() {
       };
     }
   } catch (e) { /* 网络 / 解析失败 → 退回两态 */ }
+  if (seq !== subLoadSeq) return;   // 期间已切到别的视频，这次结果作废
   subData = out;
   subDataKey = key;
   subDataLoading = false;
@@ -269,15 +277,11 @@ function applySubState(idx) {
   if (!t) return;
   const el = findSubItem(t.lan);
   if (el) {
-    // 延迟点击，确保菜单完全渲染（B 站菜单有时异步加载）
+    // 菜单项已经渲染出来了，直接点；B 站的提示随后清掉
     if (!isActive(el)) {
-      setTimeout(() => {
-        if (findSubItem(t.lan)) {  // 再次确认元素仍存在
-          clickEl(el);
-          suppressSubToast();
-          subToastSweep = SUB_TOAST_SWEEP_FRAMES;
-        }
-      }, SUB_CLICK_DELAY);
+      clickEl(el);
+      suppressSubToast();
+      subToastSweep = SUB_TOAST_SWEEP_FRAMES;
     }
   } else if (openSubMenu()) {
     subJob = { kind: 'lan', lan: t.lan };
@@ -334,16 +338,12 @@ function flushSubJob(now) {
   } else {
     const el = findSubItem(subJob.lan);
     if (el) {
-      // 找到菜单项后延迟点击，确保完全渲染
-      setTimeout(() => {
-        const item = findSubItem(subJob.lan);
-        if (item && !isActive(item)) {
-          clickEl(item);
-          suppressSubToast();
-          subToastSweep = SUB_TOAST_SWEEP_FRAMES;
-        }
-      }, SUB_CLICK_DELAY);
       subJob = null;
+      if (!isActive(el)) {
+        clickEl(el);
+        suppressSubToast();
+        subToastSweep = SUB_TOAST_SWEEP_FRAMES;
+      }
       closeSubMenu();   // 菜单是为了拿菜单项才展开的，点完收起来
     }
   }

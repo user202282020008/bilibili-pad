@@ -24,8 +24,8 @@ function updatePlayerConnection() {
 function updateBaseRate(now) {
   if (forceBase) {
     forceBase = false;
-    // 只在启用且有手柄时应用自定义倍速
-    if (cfg.enabled && activePadId && !cfg.syncPlayer) applyBase(true);
+    // 自定义默认倍速不依赖手柄：设置后立刻套用并持续守住
+    if (cfg.enabled && !cfg.syncPlayer) applyBase(true);
     else {
       // 切到同步模式：以当前实际倍速为起点，之后跟随播放器的改动
       playerRate = cur = expected = clampRate(video.playbackRate);
@@ -48,6 +48,17 @@ function readGamepadState() {
   return { pad, rt, lt, active };
 }
 
+// 扳机可达到的上下限：RT 再低也不该低于默认倍速，LT 再高也不该高于默认倍速，
+// 否则「加速 / 慢放」会在极端配置下反向生效
+function maxRateFor(base) {
+  const cap = cfg.rtMaxRel ? base + clamp(cfg.rtMaxDelta, 0.5, 15) : cfg.rtMax;
+  return clampRate(Math.max(base, cap));
+}
+
+function minRateFor(base) {
+  return clampRate(Math.min(base, cfg.ltMin));
+}
+
 // 计算目标倍速
 function calculateTargetRate(rt, lt, active) {
   const dz = clamp(cfg.deadzone, 0, 0.5);
@@ -59,7 +70,7 @@ function calculateTargetRate(rt, lt, active) {
 
   if (cfg.enabled && active && activePadId) {
     // 可调上限模式：RT 全力 = 默认倍速 + 偏移量；否则用固定值
-    const cap = cfg.rtMaxRel ? base + clamp(cfg.rtMaxDelta, 0.5, 15) : cfg.rtMax;
+    const cap = maxRateFor(base);
     if (cfg.ltAccel) {
       // LT 也加速：两扳机叠加，一起向最高速插值
       const n = clamp((clamp(rt + lt, 0, 1) - dz) / (1 - dz), 0, 1);
@@ -70,7 +81,7 @@ function calculateTargetRate(rt, lt, active) {
       if (n > 0) {
         target = net > 0
           ? base + n * (cap - base)
-          : base - n * (base - cfg.ltMin);
+          : base - n * (base - minRateFor(base));
       }
     }
     if (triggerHeld) lastActivity = performance.now();
@@ -92,7 +103,8 @@ function applyPlaybackRate(target, dt, active) {
   // 否则手柄一插着就会把播放器菜单里设的倍速覆盖掉。
   const settling = Math.abs(cur - target) > 0.004;
   // kbdBoost：键盘长按 → 官方加速期间不接管，避免把播放器的临时倍速盖掉
-  const canWrite = cfg.enabled && activePadId && !kbdBoost && ((active && (triggerHeld || settling)) || !cfg.syncPlayer);
+  const canWrite = cfg.enabled && !kbdBoost
+    && ((activePadId && active && (triggerHeld || settling)) || !cfg.syncPlayer);
   const w = q2(cur);   // 写入值量化到两位，B 站的倍速显示才不会变成一长串
 
   if (canWrite && Math.abs(w - video.playbackRate) > 0.004) {
@@ -165,8 +177,9 @@ function updateHUD(now, rt, lt) {
       : (rt >= lt ? 'RT 加速' : 'LT 减速') + (cfg.swap ? '（已交换）' : '');
     // 待命提示保持在固定宽度内（当前倍速上面的大字已经显示了，这里只报扳机区间）
     if (!note) {
-      const lo = cfg.ltAccel ? baseRate() : cfg.ltMin;
-      const cap = cfg.rtMaxRel ? baseRate() + clamp(cfg.rtMaxDelta, 0.5, 15) : cfg.rtMax;
+      const base = baseRate();
+      const lo = cfg.ltAccel ? base : minRateFor(base);
+      const cap = maxRateFor(base);
       note = activePadId
         ? '待命 · ' + lo.toFixed(2) + 'x ~ ' + cap.toFixed(1) + 'x'
         : '未检测到手柄';

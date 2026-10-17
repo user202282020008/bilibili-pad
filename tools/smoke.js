@@ -10,9 +10,25 @@ const code = manifest.content_scripts[0].js
   .map((f) => fs.readFileSync(path.join(root, f), 'utf8'))
   .join('\n;\n');
 
-function makeCtx(overrides) {
+function makeCtx(overrides, opts) {
+  opts = opts || {};
   let clock = 0;
   const rafs = [];
+  const timers = [];
+  const pendingGets = [];
+  let timerSeq = 0;
+
+  function runDueTimers() {
+    for (;;) {
+      let pick = -1;
+      for (let i = 0; i < timers.length; i++) {
+        if (timers[i].at <= clock && (pick < 0 || timers[i].at < timers[pick].at)) pick = i;
+      }
+      if (pick < 0) return;
+      const t = timers.splice(pick, 1)[0];
+      t.fn();
+    }
+  }
 
   class El {
     constructor(tag) {
@@ -64,18 +80,23 @@ function makeCtx(overrides) {
   const otherEls = [];      // 另一个播放器里的同名菜单项（不该被我们的逻辑碰到）
   let videoRoot = null;     // video.closest(...) 的返回值
   const toastLeaves = [];   // 模拟 B 站的提示条文字节点（供字幕提示清除逻辑查）
+  let toastBox = null;      // 当前提示条外壳（模拟 .bpx-player-toast）
+  let toastInner = null;
 
   // 造一条 B 站的「字幕已切换至 xx」提示：外层是 toast 壳，里层是文字
   function setSubToast(text) {
     const box = new El('div');
     box.className = 'bpx-player-toast';
     box.childElementCount = 1;
+    box.textContent = text;          // 真实 DOM 里容器的 textContent 包含子节点文字
     const inner = new El('div');
     inner.className = 'bpx-player-toast-text';
     inner.textContent = text;
     inner.parentElement = box;
     toastLeaves.length = 0;
     toastLeaves.push(inner);
+    toastBox = box;
+    toastInner = inner;
     return { box, inner };
   }
   // 弹幕开关桩：模拟 B 站三档循环开关（bui-danmaku-switch-state-1/2/3），
@@ -145,6 +166,13 @@ function makeCtx(overrides) {
     subMenuOpens = 0;
     (other || []).forEach((it) => otherEls.push(mkSubItem(it, OTHER_ROOT)));
     videoRoot = OWN_ROOT;
+    // 播放器容器里能查到提示条（与真实播放器结构一致）；文字节点脱离 toast 壳后就不再算提示条
+    OWN_ROOT.querySelectorAll = (sel) => {
+      const s = String(sel);
+      if (toastBox && toastInner && toastInner.parentElement === toastBox
+        && /toast|tip|message|notice/.test(s)) return [toastBox];
+      return [];
+    };
 
     const fill = () => (list || []).forEach((it) => subEls.push(mkSubItem(it, OWN_ROOT)));
     if (opts && opts.lazy) {
@@ -181,19 +209,37 @@ function makeCtx(overrides) {
     return Promise.reject(new Error('no stub: ' + u));
   };
 
+  const loc = { pathname: '/video/BV1xx', search: '' };
+  Object.defineProperty(loc, 'href', {
+    get() { return 'https://www.bilibili.com' + loc.pathname + loc.search; },
+  });
+
   const ctx = {
     console,
     Math, JSON, Number, Object, Array, String, Boolean, isFinite, performance: { now: () => clock },
-    location: { pathname: '/video/BV1xx', search: '' },
+    location: loc,
     URLSearchParams,
     fetch: fetchStub,
     document,
     navigator: { getGamepads: () => [pad] },
     requestAnimationFrame: (cb) => { rafs.push(cb); return rafs.length; },
+    setTimeout: (fn, ms) => {
+      const id = ++timerSeq;
+      timers.push({ id, at: clock + (Number(ms) || 0), fn });
+      return id;
+    },
+    clearTimeout: (id) => {
+      const i = timers.findIndex((t) => t.id === id);
+      if (i >= 0) timers.splice(i, 1);
+    },
     getComputedStyle: () => ({ position: 'relative' }),
     chrome: {
       storage: {
-        sync: { store: {}, get(d, cb) { cb(Object.assign({}, d, this.store, overrides || {})); },
+        sync: { store: {}, get(d, cb) {
+                  const run = () => cb(Object.assign({}, d, this.store, overrides || {}));
+                  // 模拟真实 chrome.storage 的异步回调：测试里手动 flush
+                  if (opts.deferStorage) pendingGets.push(run); else run();
+                },
                 set(o) { Object.assign(this.store, o); } },
         local: { store: {}, get(d, cb) { cb(Object.assign({}, d, this.store)); },
                  set(o) { Object.assign(this.store, o); } },
@@ -229,6 +275,8 @@ function makeCtx(overrides) {
     msg: ctx.chrome.runtime.onMessage,
     step(ms) {
       clock += ms;
+      // 假时钟推进后先触发到期的 setTimeout，再跑这一帧的 rAF
+      runDueTimers();
       const cbs = rafs.splice(0, rafs.length);
       cbs.forEach((cb) => cb(clock));
     },
@@ -236,6 +284,8 @@ function makeCtx(overrides) {
     async settle() {
       for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
     },
+    // 配合 opts.deferStorage：等测试准备好了再让配置回调落地
+    flushStorage() { pendingGets.splice(0).forEach((f) => f()); },
   };
 }
 
@@ -273,6 +323,49 @@ run('LT 全按 → 0.25x 慢放', () => {
   t.pad.buttons[6].value = 1;
   for (let i = 0; i < 120; i++) t.step(16);
   if (!near(t.video.playbackRate, 0.25, 0.02)) throw new Error('得到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('默认倍速低于 LT 慢放值：按 LT 不应反而加速', () => {
+  const t = makeCtx({ syncPlayer: false, base: 0.5, ltMin: 1 });
+  for (let i = 0; i < 10; i++) t.step(16);
+  t.pad.buttons[6].value = 1;
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (t.video.playbackRate > 0.55) throw new Error('LT 反而把倍速抬到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('RT 上限低于默认倍速：按 RT 不应反而减速', () => {
+  const t = makeCtx({ syncPlayer: false, base: 5, rtMax: 3 });
+  for (let i = 0; i < 10; i++) t.step(16);
+  t.pad.buttons[7].value = 1;
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 5, 0.02)) throw new Error('RT 把倍速降到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('RT 上限 = 默认 + 偏移（rtMaxRel）', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2, rtMaxRel: true, rtMaxDelta: 1.5 });
+  for (let i = 0; i < 10; i++) t.step(16);
+  t.pad.buttons[7].value = 1;
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 3.5, 0.02)) throw new Error('得到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('LT 也加速：松开 RT 后按 LT 仍向最高速', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2, ltAccel: true, rtMax: 4 });
+  for (let i = 0; i < 10; i++) t.step(16);
+  t.pad.buttons[6].value = 1;
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 4, 0.02)) throw new Error('得到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('交换 LT / RT：RT 变成慢放、LT 变成加速', () => {
+  const t = makeCtx({ swap: true });
+  t.pad.buttons[7].value = 1;              // 物理 RT → 逻辑 LT
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 0.25, 0.02)) throw new Error('物理 RT 未变成慢放：' + t.video.playbackRate.toFixed(3));
+  t.pad.buttons[7].value = 0;
+  t.pad.buttons[6].value = 1;              // 物理 LT → 逻辑 RT
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 3, 0.02)) throw new Error('物理 LT 未变成加速：' + t.video.playbackRate.toFixed(3));
 });
 
 run('松开扳机回到 1x', () => {
@@ -322,6 +415,20 @@ run('默认倍速 2x：松开扳机回到 2x 而不是 1x', () => {
   t.pad.buttons[7].value = 0;
   for (let i = 0; i < 120; i++) t.step(16);
   if (!near(t.video.playbackRate, 2, 0.01)) throw new Error('得到 ' + t.video.playbackRate.toFixed(3));
+});
+
+run('键盘长按 → 临时加速期间不抢回倍速，松开后恢复', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2 });
+  for (let i = 0; i < 10; i++) t.step(16);
+  if (!near(t.video.playbackRate, 2, 0.01)) throw new Error('初始 ' + t.video.playbackRate.toFixed(3));
+  t.ctx.dispatchEvent({ type: 'keydown', key: 'ArrowRight', target: null });
+  t.step(16);
+  t.video.playbackRate = 4;                // B 站官方临时加速
+  for (let i = 0; i < 60; i++) t.step(16);
+  if (!near(t.video.playbackRate, 4, 0.01)) throw new Error('官方加速被盖成 ' + t.video.playbackRate.toFixed(3));
+  t.ctx.dispatchEvent({ type: 'keyup', key: 'ArrowRight' });
+  for (let i = 0; i < 120; i++) t.step(16);
+  if (!near(t.video.playbackRate, 2, 0.01)) throw new Error('松开后未恢复：' + t.video.playbackRate.toFixed(3));
 });
 
 run('弹窗改默认倍速 → 立即生效', () => {
@@ -517,6 +624,41 @@ run('字幕状态持久化：加载时按接口列表恢复保存的语言', asy
   if (!t.subEls[1]._cls.has('active')) throw new Error('未恢复保存的第 2 条字幕');
 });
 
+run('配置比播放器晚到：仍会补恢复保存的字幕', async () => {
+  const t = makeCtx({ subIndex: 2 }, { deferStorage: true });
+  t.setSubApi(
+    { aid: 1, cid: 2, pages: [{ cid: 2 }] },
+    { lan: '', subtitles: [{ lan: 'zh-CN', lan_doc: '中文' }, { lan: 'en-US', lan_doc: 'English' }] }
+  );
+  t.setSubItems([{ name: '中文', lan: 'zh-CN' }, { name: 'English', lan: 'en-US' }]);
+  t.step(16);                       // 播放器已经挂上，但配置还没回来（subIndex 仍是默认 -1）
+  t.flushStorage();                 // 配置晚到
+  for (let i = 0; i < 31; i++) t.step(16);   // 重试窗口触发轨道加载
+  await t.settle();
+  for (let i = 0; i < 70; i++) t.step(16);
+  if (!t.subEls[1]._cls.has('active')) throw new Error('晚到的配置没有补恢复字幕');
+});
+
+run('SPA 切换视频后重新恢复保存的字幕', async () => {
+  const { t } = subEnv({
+    overrides: { subIndex: 2 },
+    tracks: [{ lan: 'zh-CN', doc: '中文' }, { lan: 'en-US', doc: 'English' }],
+    items: [{ lan: 'zh-CN', doc: '中文' }, { lan: 'en-US', doc: 'English' }],
+  });
+  await t.settle();
+  for (let i = 0; i < 70; i++) t.step(16);
+  if (!t.subEls[1]._cls.has('active')) throw new Error('首个视频未恢复字幕');
+
+  t.subEls.forEach((el) => el._cls.delete('active'));   // 新视频的菜单默认没有选中项
+  t.ctx.location.pathname = '/video/BV2yy';
+  t.step(16);                                           // URL 变化 → 重置字幕状态
+  await t.settle();
+  for (let i = 0; i < 31; i++) t.step(16);              // 触发新一轮轨道加载
+  await t.settle();
+  for (let i = 0; i < 70; i++) t.step(16);
+  if (!t.subEls[1]._cls.has('active')) throw new Error('切换视频后未重新套用保存的字幕');
+});
+
 run('关闭「R1 循环字幕」开关后不响应', () => {
   const t = makeCtx({ rbSub: false });
   t.setSubItems([{ name: '中文', lan: 'zh-CN' }]);
@@ -533,6 +675,20 @@ run('尚未接管时不动用户的字幕（不自动开关）', () => {
   for (let i = 0; i < 70; i++) t.step(16);
   if (t.subEls[0]._cls.has('active')) throw new Error('不该自动开启字幕');
   if (t.ctx.document.documentElement._cls.has('pts-sub-off')) throw new Error('不该自动隐藏字幕');
+});
+
+run('旧配置 subOn 迁移到 subIndex 并持久化', async () => {
+  const t = makeCtx({ v2: true, subOn: true });
+  t.setSubApi({ aid: 1, cid: 2, pages: [{ cid: 2 }] },
+    { lan: '', subtitles: [{ lan: 'zh-CN', lan_doc: '中文' }] });
+  t.setSubItems([{ name: '中文', lan: 'zh-CN' }]);
+  t.step(16);
+  await t.settle();
+  for (let i = 0; i < 70; i++) t.step(16);
+  if (t.ctx.chrome.storage.sync.store.subIndex !== 1) {
+    throw new Error('迁移后的 subIndex 没写回 storage：' + t.ctx.chrome.storage.sync.store.subIndex);
+  }
+  if (!t.subEls[0]._cls.has('active')) throw new Error('迁移后没有恢复字幕');
 });
 
 run('旧配置 useBase 迁移到 syncPlayer（自定义默认倍速不丢）', () => {

@@ -95,8 +95,8 @@ function attach(v) {
   video = v;
   playerRate = clampRate(v.playbackRate);
   reportPlayerRate();
-  // 只在启用且有手柄时应用自定义倍速
-  if (cfg.enabled && activePadId && !cfg.syncPlayer) applyBase(true);
+  // 自定义默认倍速不依赖手柄：打开视频就套用（手柄只是用来临时加减速）
+  if (cfg.enabled && !cfg.syncPlayer) applyBase(true);
   else cur = expected = playerRate;
   v.addEventListener('ratechange', onRateChange);
   // 字幕：之前已接管过就回到保存的状态（菜单可能晚于播放器渲染，交给主循环重试）

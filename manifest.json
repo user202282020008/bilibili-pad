@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B站手柄倍速",
-  "version": "1.0.0",
+  "version": "1.3.1",
   "description": "用手柄扳机（LT / RT）的按压力度实时控制 B 站视频倍速；方向键调音量与默认倍速，肩键暂停 / 字幕，X / Y 宽屏 / 全屏。",
   "permissions": ["storage", "scripting"],
   "host_permissions": [

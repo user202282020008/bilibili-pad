@@ -23,8 +23,15 @@ function loadConfig() {
       // 旧版 subOn（布尔开关）迁移到 subIndex
       if (v && v.subOn !== undefined) {
         cfg.subIndex = v.subOn ? 1 : 0;
-        try { chrome.storage.sync.remove('subOn'); } catch (e) { /* ignore */ }
+        try {
+          chrome.storage.sync.set({ subIndex: cfg.subIndex });
+          chrome.storage.sync.remove('subOn');
+        } catch (e) { /* ignore */ }
       }
+      // storage 是异步的，回调可能晚于播放器挂载：标记成待恢复，
+      // 让主循环在拿到播放器/轨道列表后补上（否则保存的字幕状态会丢）
+      subApplied = cfg.subIndex < 0;
+      subTries = 0;
       forceBase = true;   // 配置到位后立刻套用默认倍速
     });
   } catch (e) { /* storage 不可用时用默认值 */ }

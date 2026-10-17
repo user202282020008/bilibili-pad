@@ -60,7 +60,6 @@ const VOL_INITIAL_DELAY = 280;      // 音量按键首次触发延迟（毫秒�
 const VOL_REPEAT_DELAY = 110;       // 音量按键连发间隔（毫秒）
 const RATE_CHANGE_WINDOW = 250;     // 倍速变更检测窗口（毫秒）
 const PLAYER_SYNC_THRESHOLD = 300;  // 播放器同步判断的空闲阈值（毫秒）
-const SUB_CLICK_DELAY = 50;         // 字幕菜单项点击延迟（毫秒，确保菜单完全渲染）
 const RATE_DRIFT_CHECK_INTERVAL = 60; // 倍速漂移检查间隔（帧数）
 
 // ---------------------------------------------------------------- 运行时配置

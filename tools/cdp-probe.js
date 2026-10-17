@@ -113,6 +113,7 @@ async function main() {
       if (/extension|manifest|Failed to load|Invalid/i.test(line)) logs.push(line.trim());
     }
   });
+  let cdp = null;
 
   try {
     let up = false;
@@ -123,7 +124,7 @@ async function main() {
 
     const res = await fetch('http://127.0.0.1:' + PORT + '/json/new?' + encodeURIComponent(url), { method: 'PUT' });
     const target = await res.json();
-    const cdp = await CDP.connect(target.webSocketDebuggerUrl);
+    cdp = await CDP.connect(target.webSocketDebuggerUrl);
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
 
@@ -170,6 +171,11 @@ async function main() {
     }
     if (logs.length) console.error('\n[chrome 日志]\n' + logs.slice(-15).join('\n'));
   } finally {
+    // 先让 Chrome 自己优雅退出（会带走所有子进程），再兜底 kill
+    try { if (cdp) await cdp.send('Browser.close'); } catch (e) { /* ignore */ }
+    // 不关掉 WebSocket / stderr 管道，Node 会一直挂在事件循环里不退出
+    try { if (cdp) cdp.ws.close(); } catch (e) { /* ignore */ }
+    try { chrome.stderr.destroy(); } catch (e) { /* ignore */ }
     try { chrome.kill(); } catch (e) { /* ignore */ }
   }
 }
