@@ -31,18 +31,24 @@ function handleRateStep(pad, now) {
   if (!cfg.dpadRate || !pad) { rateDir = 0; return; }
   const dir = pressed(pad, PAD.RIGHT) ? 1 : pressed(pad, PAD.LEFT) ? -1 : 0;
   if (dir && dir !== rateDir) {
-    setBaseRate(clampRate(cfg.base) + dir * RATE_STEP);
-    flash('默认倍速 ' + q2(cfg.base).toFixed(2) + 'x', now);
+    setBaseRate(baseRate() + dir * RATE_STEP);
+    flash('默认倍速 ' + q2(baseRate()).toFixed(2) + 'x', now);
   }
   rateDir = dir;
 }
 
-// 改默认倍速：退出跟随模式，立刻套用并保存
+// 调速不切换模式：跟随时更新播放器基准，自定义时保存固定值。
 function setBaseRate(v) {
-  cfg.base = clamp(q2(v), BASE_MIN, BASE_MAX);
-  cfg.syncPlayer = false;             // 手动调了就按自定义值来
-  forceBase = true;                   // 下一帧套用
-  try { chrome.storage.sync.set({ base: cfg.base, syncPlayer: false }); } catch (e) { /* ignore */ }
+  const next = clamp(q2(v), BASE_MIN, BASE_MAX);
+  if (cfg.syncPlayer) {
+    restoreRate = playerRate = cur = next;
+    setRate(next);
+    reportPlayerRate();
+  } else {
+    cfg.base = next;
+    forceBase = true;
+    try { chrome.storage.sync.set({ base: cfg.base }); } catch (e) { /* ignore */ }
+  }
 }
 
 // ---------------------------------------------------------------- 快退 / 快进
@@ -261,6 +267,7 @@ function suppressSubToast() {
 
 // 套用某个字幕状态（0 = 关）
 function applySubState(idx) {
+  if (!cfg.enabled) { subApplied = false; return; }
   const root = document.documentElement;
   const tracks = subTracks();
   const n = Math.max(2, tracks.length + 1);

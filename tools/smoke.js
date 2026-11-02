@@ -751,7 +751,8 @@ run('弹窗关闭「启用」后，扣扳机不再变速', () => {
   if (!near(before, 3, 0.02)) throw new Error('前置失败：得到 ' + before.toFixed(3));
   t.ctx.chrome.storage.onChanged.fire({ enabled: { newValue: false } });
   for (let i = 0; i < 60; i++) t.step(16);
-  if (t.video.playbackRate > before + 0.01) throw new Error('关闭后仍在变速：' + t.video.playbackRate.toFixed(3));
+  if (t.video.playbackRate !== 1) throw new Error('关闭后未恢复原速：' + t.video.playbackRate);
+  if (vm.runInContext('hud !== null', t.ctx)) throw new Error('关闭后 HUD 仍存在');
 });
 
 run('重新打开「启用」后恢复变速', () => {
@@ -827,14 +828,14 @@ run('免刷新：关闭「启用」后立即停止响应扳机', () => {
   if (!near(t.video.playbackRate, 1, 0.02)) throw new Error('关闭后仍变速：' + t.video.playbackRate.toFixed(2));
 });
 
-run('方向键 → 默认倍速 +0.25 并退出跟随模式', () => {
+run('方向键 → 默认倍速 +0.25 并保持跟随模式', () => {
   const t = makeCtx();                          // syncPlayer 默认开
   t.step(16); t.step(16);
   t.pad.buttons[15].pressed = true;
   for (let i = 0; i < 5; i++) t.step(16);
   if (!near(t.video.playbackRate, 1.25, 0.02)) throw new Error('倍速未 +0.25：' + t.video.playbackRate.toFixed(2));
-  if (t.ctx.chrome.storage.sync.store.syncPlayer !== false) throw new Error('未退出跟随模式');
-  if (!near(t.ctx.chrome.storage.sync.store.base, 1.25, 0.001)) throw new Error('未保存 base');
+  if (!vm.runInContext('cfg.syncPlayer', t.ctx)) throw new Error('意外退出跟随模式');
+  if (t.ctx.chrome.storage.local.store.playerRate !== 1.25) throw new Error('未上报播放器基准');
 });
 
 run('方向键 ← 默认倍速 -0.25，按住不连发', () => {
@@ -1253,6 +1254,109 @@ run('菜单始终渲染不出菜单项时也能干净收尾（不卡住、状态
   if (t.ctx.chrome.storage.sync.store.subIndex !== 1) {
     throw new Error('状态没推进，subIndex=' + t.ctx.chrome.storage.sync.store.subIndex);
   }
+});
+
+for (const smooth of [0, 0.08, 0.5]) {
+  run('扳机往返保持跟随和精确基准（平滑 ' + smooth + '）', () => {
+    const t = makeCtx({ smooth });
+    t.step(16);
+    t.video.playbackRate = 1.5;
+    t.step(16);
+    for (let cycle = 0; cycle < 5; cycle++) {
+      t.pad.buttons[7].value = 1;
+      for (let i = 0; i < 240; i++) t.step(16);
+      t.pad.buttons[7].value = 0;
+      for (let i = 0; i < 240; i++) t.step(16);
+      if (t.video.playbackRate !== 1.5) throw new Error('基准漂移：' + t.video.playbackRate);
+      if (!vm.runInContext('cfg.syncPlayer', t.ctx)) throw new Error('跟随被关闭');
+    }
+    t.video.playbackRate = 2;
+    t.step(16);
+    if (t.video.playbackRate !== 2 || t.ctx.chrome.storage.local.store.playerRate !== 2) {
+      throw new Error('松手后无法跟随播放器新设置');
+    }
+  });
+}
+
+run('加速时拔掉手柄仍会回到基准', () => {
+  const t = makeCtx({ smooth: 0 });
+  t.step(16);
+  t.pad.buttons[7].value = 1;
+  t.step(16);
+  t.pad.connected = false;
+  t.step(16);
+  if (t.video.playbackRate !== 1) throw new Error('断开后停留在加速值');
+});
+
+run('关闭自定义倍速后恢复播放器，再启用无需手柄也恢复自定义', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2 });
+  t.pad.connected = false;
+  t.step(16);
+  t.ctx.chrome.storage.onChanged.fire({ enabled: { newValue: false } });
+  t.step(16);
+  if (t.video.playbackRate !== 1) throw new Error('关闭后未恢复接管前倍速');
+  t.video.playbackRate = 1.5;
+  for (let i = 0; i < 60; i++) t.step(16);
+  if (t.video.playbackRate !== 1.5) throw new Error('停用时仍抢占倍速');
+  t.ctx.chrome.storage.onChanged.fire({ enabled: { newValue: true } });
+  t.step(16);
+  if (t.video.playbackRate !== 2) throw new Error('重启未恢复自定义倍速');
+  t.ctx.chrome.storage.onChanged.fire({ enabled: { newValue: false } });
+  t.step(16);
+  if (t.video.playbackRate !== 1.5) throw new Error('未记住本次接管前倍速');
+});
+
+run('关闭扩展清除字幕隐藏效果并取消未完成的字幕任务', async () => {
+  const t = makeCtx({ subIndex: 0 });
+  await t.settle();
+  for (let i = 0; i < 35; i++) t.step(16);
+  if (!t.ctx.document.documentElement.classList.contains('pts-sub-off')) throw new Error('前置失败');
+  vm.runInContext("subJob = { kind: 'advance' }; subJobTries = 100", t.ctx);
+  t.ctx.chrome.storage.onChanged.fire({ enabled: { newValue: false } });
+  for (let i = 0; i < 150; i++) t.step(16);
+  if (t.ctx.document.documentElement.classList.contains('pts-sub-off')) throw new Error('字幕仍被隐藏');
+  if (vm.runInContext('subJob !== null', t.ctx)) throw new Error('字幕任务未取消');
+  if (t.ctx.chrome.storage.sync.store.subIndex !== undefined) throw new Error('关闭后仍切换字幕');
+});
+
+run('以停用状态启动不恢复字幕也不显示 HUD', async () => {
+  const t = makeCtx({ enabled: false, subIndex: 0 });
+  await t.settle();
+  for (let i = 0; i < 60; i++) t.step(16);
+  if (t.ctx.document.documentElement.classList.contains('pts-sub-off')) throw new Error('停用时隐藏字幕');
+  if (vm.runInContext('hud !== null', t.ctx)) throw new Error('停用时显示 HUD');
+});
+
+run('跟随模式方向键从播放器基准而非旧自定义值起步', () => {
+  const t = makeCtx({ base: 4 });
+  t.step(16);
+  t.video.playbackRate = 2;
+  t.step(16);
+  t.pad.buttons[15].pressed = true;
+  t.step(16);
+  if (t.video.playbackRate !== 2.25) throw new Error('方向键调速起点错误');
+  if (!vm.runInContext('cfg.syncPlayer', t.ctx)) throw new Error('跟随被关闭');
+});
+
+run('自定义模式方向键保存基准并保持模式', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2 });
+  t.step(16);
+  t.pad.buttons[15].pressed = true;
+  t.step(16); t.step(16);
+  if (t.video.playbackRate !== 2.25 || t.ctx.chrome.storage.sync.store.base !== 2.25) throw new Error('未保存自定义基准');
+  if (vm.runInContext('cfg.syncPlayer', t.ctx)) throw new Error('自定义模式被改变');
+});
+
+run('扣扳机期间开启跟随不会把瞬时加速值当成基准', () => {
+  const t = makeCtx({ syncPlayer: false, base: 2, smooth: 0 });
+  t.step(16);
+  t.pad.buttons[7].value = 1;
+  t.step(16);
+  t.ctx.chrome.storage.onChanged.fire({ syncPlayer: { newValue: true } });
+  t.step(16);
+  t.pad.buttons[7].value = 0;
+  t.step(16);
+  if (t.video.playbackRate !== 2) throw new Error('把临时加速值当成基准');
 });
 
 main();

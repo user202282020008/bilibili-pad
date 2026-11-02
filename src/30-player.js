@@ -63,7 +63,7 @@ function setRate(v) {
   if (!video) return;
   writeAt = performance.now();
   expected = v;
-  try { video.playbackRate = v; } catch (e) { /* ignore */ }
+  try { video.playbackRate = v; rateOwned = true; } catch (e) { /* ignore */ }
 }
 
 // 立刻把视频切到自定义默认倍速
@@ -83,31 +83,110 @@ function onRateChange() {
   // 键盘长按 → 官方加速是临时状态，不当成新的基准倍速
   if (kbdBoost) return;
   // 空闲时播放器的倍速变化就是新的基准（同步模式下跟随它）
-  if (!triggerHeld && now - lastActivity > PLAYER_SYNC_THRESHOLD) {
+  if (!triggerHeld && !triggerReturning && now - lastActivity > PLAYER_SYNC_THRESHOLD) {
     playerRate = r;
+    restoreRate = r;
     reportPlayerRate();
     cur = r;
+  }
+}
+
+// 总开关停用时交还播放器控制权，清除扩展的临时状态。
+function updateEnabledState() {
+  if (playbackEnabled === cfg.enabled) return;
+  playbackEnabled = cfg.enabled;
+  if (!cfg.enabled) {
+    if (video && rateOwned && !kbdBoost) setRate(restoreRate);
+    rateOwned = false;
+    triggerHeld = triggerReturning = false;
+    volDir = rateDir = 0;
+    lbPrev = rbPrev = xPrev = yPrev = aPrev = bPrev = r3Prev = false;
+    aSeekStep = bSeekStep = 0;
+    aSeekAt = bSeekAt = -1e9;
+    lastActivity = -1e9;
+    flashUntil = 0;
+    subJob = null;
+    subToastSweep = 0;
+    document.documentElement.classList.remove('pts-sub-off');
+    removeHud();
+  } else {
+    if (video) restoreRate = playerRate = cur = expected = clampRate(video.playbackRate);
+    forceBase = true;
+    subApplied = cfg.subIndex < 0;
+    subTries = 0;
+    updateSpeedMenu();
+  }
+}
+
+// ---------------------------------------------------------------- 播放器倍速菜单
+const SPEED_MENU_SEL = '.bpx-player-ctrl-playbackrate-menu';
+let extraSpeedItems = [];
+
+function removeSpeedMenuItems() {
+  for (const item of extraSpeedItems) item.remove();
+  extraSpeedItems = [];
+}
+
+function updateSpeedMenu() {
+  if (!video) { removeSpeedMenuItems(); return; }
+  const root = video.closest('.bpx-player-container, .bilibili-player, #bilibili-player');
+  if (!root) return;
+  extraSpeedItems = extraSpeedItems.filter((item) => item.isConnected);
+  for (const menu of root.querySelectorAll(SPEED_MENU_SEL)) {
+    // 原生菜单未来若自带 3x，直接沿用；菜单重建后低频扫描会重新补齐。
+    if (Array.from(menu.children).some((item) => Number(item.getAttribute('data-value')) === 3)) continue;
+    const item = document.createElement('li');
+    item.className = 'bpx-player-ctrl-playbackrate-menu-item';
+    item.textContent = '3.0x';
+    item.setAttribute('data-value', '3');
+    item.addEventListener('click', (event) => {
+      // 阻止原生委托事件用内部的固定倍速列表覆盖本次选择。
+      event.preventDefault();
+      event.stopPropagation();
+      if (!instanceAlive() || !video) return;
+      // 菜单始终可用，停用手柄控制时不修改已保存的固定倍速。
+      if (cfg.enabled && !cfg.syncPlayer) setBaseRate(3);
+      restoreRate = playerRate = cur = 3;
+      setRate(3);
+      reportPlayerRate();
+      updateSpeedMenu();
+    });
+    const before = Array.from(menu.children).find((child) => Number(child.getAttribute('data-value')) < 3);
+    menu.insertBefore(item, before || null);
+    extraSpeedItems.push(item);
+  }
+  for (const item of extraSpeedItems) {
+    const selected = Math.abs(video.playbackRate - 3) < 0.005;
+    item.classList.toggle('bpx-state-active', selected);
+    if (selected) {
+      for (const sibling of item.parentElement.children) {
+        if (sibling !== item) sibling.classList.remove('bpx-state-active');
+      }
+    }
   }
 }
 
 // ---------------------------------------------------------------- 挂载
 function attach(v) {
   video = v;
-  playerRate = clampRate(v.playbackRate);
+  rateOwned = triggerReturning = false;
+  restoreRate = playerRate = clampRate(v.playbackRate);
   reportPlayerRate();
   // 自定义默认倍速不依赖手柄：打开视频就套用（手柄只是用来临时加减速）
   if (cfg.enabled && !cfg.syncPlayer) applyBase(true);
   else cur = expected = playerRate;
   v.addEventListener('ratechange', onRateChange);
+  updateSpeedMenu();
   // 字幕：之前已接管过就回到保存的状态（菜单可能晚于播放器渲染，交给主循环重试）
   subApplied = cfg.subIndex < 0;
   subTries = 0;
-  if (!subApplied && restoreSub()) subApplied = true;
-  if (cfg.hud) buildHud(v, hudAnchor(v));
+  if (cfg.enabled && !subApplied && restoreSub()) subApplied = true;
+  if (cfg.enabled && cfg.hud) buildHud(v, hudAnchor(v));
 }
 
 function detach() {
   if (video) video.removeEventListener('ratechange', onRateChange);
+  removeSpeedMenuItems();
   video = null;
   removeHud();
 }

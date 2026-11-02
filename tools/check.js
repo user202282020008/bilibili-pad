@@ -92,5 +92,10 @@ try {
   else ok('冒烟测试 ' + pass + ' 项全通过');
 } catch (e) { err('冒烟测试异常'); console.log(e.stdout || e.message); }
 
+try {
+  const out = execFileSync(process.execPath, [path.join(__dirname, 'popup-smoke.js')], { encoding: 'utf8' });
+  ok('弹窗回归测试 ' + (out.match(/^PASS/gm) || []).length + ' 项全通过');
+} catch (e) { err('弹窗回归测试异常'); console.log(e.stdout || e.message); }
+
 console.log(bad ? '\n共有 ' + bad + ' 个问题' : '\n检查全部通过');
 process.exit(bad ? 1 : 0);

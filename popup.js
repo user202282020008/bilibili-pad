@@ -47,25 +47,52 @@ const CUSTOM = { base: { min: 0.25, max: 8 } };  // 允许超出滑块范围的�
 
 // 设置写入：合并高频改动（拖滑块会连发 input 事件，会撞 storage.sync 的写入频率配额），
 // 落盘后主动通知当前标签页重读，做到免刷新即时生效
-let saveTimer = 0, savePending = null;
-function saveSettings(obj) {
+let saveTimer = 0, savePending = null, failedSettings = null, saveInFlight = false;
+function saveStatus(text, error = false) {
+  const status = document.getElementById('saveStatus');
+  status.textContent = text;
+  status.dataset.state = error ? 'error' : 'normal';
+  document.getElementById('save').hidden = !error;
+}
+function saveSettings(obj, immediate = false) {
   savePending = Object.assign(savePending || {}, obj);
+  saveStatus('正在保存…');
+  // 开关直接落盘，避免点击后立刻关闭弹窗时丢失；仅滑块输入防抖。
+  if (immediate) {
+    clearTimeout(saveTimer);
+    flushSettings();
+    return;
+  }
   if (saveTimer) return;
   saveTimer = setTimeout(flushSettings, 200);
 }
 function flushSettings() {
   saveTimer = 0;
-  const obj = savePending || {};
+  if (saveInFlight || (!savePending && !failedSettings)) return;
+  const obj = Object.assign({}, failedSettings || {}, savePending || {});
   savePending = null;
-  chrome.storage.sync.set(obj, notifyTab);
+  failedSettings = null;
+  saveInFlight = true;
+  chrome.storage.sync.set(obj, () => {
+    saveInFlight = false;
+    const error = chrome.runtime && chrome.runtime.lastError;
+    if (error) {
+      failedSettings = obj;
+      saveStatus('保存失败，请重试', true);
+    } else {
+      saveStatus('已保存 · 自动同步设置');
+      notifyTab();
+    }
+    if (savePending) { clearTimeout(saveTimer); flushSettings(); }
+  });
 }
 // 弹窗被关掉时挂起的写入会连同定时器一起消失，这里补一次立即落盘
 function flushNow() {
-  if (!saveTimer || !savePending) return;
+  if (!savePending) return;
   clearTimeout(saveTimer);
   flushSettings();
 }
-function notifyTab() {
+function notifyTab(allowInject = true) {
   try {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs && tabs[0];
@@ -74,7 +101,7 @@ function notifyTab() {
         if (!chrome.runtime.lastError) return;   // 页面里的脚本还活着，配置已实时下发
         // 收不到回应 = 那份脚本因为扩展重载失联了，直接补注入一份新的，
         // 这样改完设置 / 改完代码都不用再刷新 B 站页面
-        if (!tab.url) return;                    // 不是 B 站页面（无权限看 url），不注入
+        if (!allowInject || !/^https:\/\/([\w-]+\.)*bilibili\.com\//.test(tab.url || '')) return;
         injectContentScript(tab.id);
       });
     });
@@ -89,31 +116,35 @@ function injectContentScript(tabId) {
     chrome.scripting.executeScript(
       { target: { tabId, allFrames: !!cs.all_frames }, files },
       () => {
-        void chrome.runtime.lastError;
-        notifyTab();                             // 新脚本就位后再推一次配置
+        if (chrome.runtime.lastError) return;
+        notifyTab(false);                        // 每次通知最多补注入一次
       }
     );
   } catch (e) { /* ignore */ }
 }
 
 function setBase(v, fromSlider) {
+  if (cfg.syncPlayer) return;  // 跟随模式仅展示基准，不能隐式切换成自定义。
   const c = CUSTOM.base;
   const n = Math.min(c.max, Math.max(c.min, Number(v)));
   if (!isFinite(n)) return;
   cfg.base = n;
   const patch = { base: n };
-  if (cfg.syncPlayer) {           // 动了默认倍速就自动退出同步模式
-    cfg.syncPlayer = false;
-    inputs.syncPlayer.checked = false;
-    patch.syncPlayer = false;
-  }
   saveSettings(patch);
   if (!fromSlider) inputs.base.value = n;
   syncBase();
+  syncModeRows();
 }
 
 function syncBase() {
   const sync = !!cfg.syncPlayer;
+  inputs.syncPlayer.checked = sync;
+  document.getElementById('fixedBase').checked = !sync;
+  document.getElementById('followRate').hidden = !sync;
+  document.getElementById('fixedRate').hidden = sync;
+  document.getElementById('baseHint').textContent = sync
+    ? '在播放器中选择倍速，扳机只做临时加减速。'
+    : '启用控制时持续使用此倍速；扳机松开后恢复，支持精确输入。';
   inputs.base.disabled = sync;
   const row = document.getElementById('baseRow');
   if (row) row.classList.toggle('off', sync);
@@ -121,6 +152,7 @@ function syncBase() {
   const shown = sync ? (playerRate || 1) : cfg.base;
   inputs.base.value = shown;
   const num = document.getElementById('baseNum');
+  if (num) num.disabled = sync;
   if (num && document.activeElement !== num) num.value = trim(shown);
   const live = document.getElementById('playerRateV');
   if (live) live.textContent = playerRate ? FMT.base(playerRate) : '—';
@@ -136,6 +168,22 @@ function syncModeRows() {
   if (inputs.rtMax) inputs.rtMax.disabled = rel;
   if (inputs.rtMaxDelta) inputs.rtMaxDelta.disabled = !rel;
   if (inputs.ltMin) inputs.ltMin.disabled = acc;
+  document.getElementById('rtMaxV').disabled = rel;
+  document.getElementById('rtMaxDeltaV').disabled = !rel;
+  document.getElementById('ltMinV').disabled = acc;
+  document.getElementById('fixedCap').hidden = rel;
+  document.getElementById('relativeCap').hidden = !rel;
+  document.getElementById('slowRate').hidden = acc;
+  const base = cfg.syncPlayer ? (playerRate || 1) : cfg.base;
+  document.getElementById('capHint').textContent = rel
+    ? '默认 ' + trim(base) + 'x + ' + trim(cfg.rtMaxDelta) + 'x，最高 ' + trim(Math.min(16, base + cfg.rtMaxDelta)) + 'x。'
+    : '按得越深越快，最高不低于默认倍速。';
+  document.getElementById('ltHint').textContent = acc
+    ? 'LT / RT 的力度叠加，共同向加速上限变化。'
+    : 'LT 减速、RT 加速；同时按下时按力度差计算。';
+  inputs.yCycle.disabled = !cfg.yFull;
+  document.getElementById('enabledHint').textContent = cfg.enabled
+    ? '已开启 · 设置即时生效' : '已暂停 · 设置保留，3 倍速仍可使用';
 }
 
 function render(next) {
@@ -143,7 +191,7 @@ function render(next) {
   for (const k of Object.keys(DEFAULTS)) {
     const el = inputs[k];
     if (!el) continue;
-    if (el.type === 'checkbox') el.checked = !!cfg[k];
+    if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!cfg[k];
     else if (k !== 'base' && k !== 'subIndex') {
       el.value = cfg[k];
       const out = document.getElementById(k + 'V');
@@ -169,34 +217,53 @@ chrome.storage.sync.get(DEFAULTS, (v) => {
 chrome.storage.local.get({ playerRate: 0 }, (v) => {
   playerRate = v.playerRate || 0;
   syncBase();
+  syncModeRows();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
-  if (changes.playerRate) { playerRate = changes.playerRate.newValue || 0; syncBase(); }
+  if (area === 'local' && changes.playerRate) {
+    playerRate = changes.playerRate.newValue || 0;
+    syncBase();
+    syncModeRows();
+  } else if (area === 'sync') {
+    const next = Object.assign({}, cfg);
+    for (const k of Object.keys(changes)) if (k in DEFAULTS) next[k] = changes[k].newValue;
+    render(Object.assign(next, savePending || {}));
+  }
 });
 
 for (const k of Object.keys(DEFAULTS)) {
   const el = inputs[k];
   if (!el) continue;
   el.addEventListener('input', () => {
+    if (k === 'syncPlayer') { if (el.checked) selectBaseMode(true); return; }
     const v = el.type === 'checkbox' ? el.checked : Number(el.value);
-    if (k === 'base') { setBase(v, true); return; }   // 拖滑块即退出同步模式
+    if (k === 'base') { setBase(v, true); return; }
     cfg[k] = v;
     const out = document.getElementById(k + 'V');
-    if (k === 'rtMaxRel' || k === 'ltAccel') syncModeRows();
+    syncModeRows();
     if (k === 'syncPlayer') syncBase();
     else if (out) {
       if (out.tagName === 'INPUT') out.value = trim(v);
       else if (FMT[k]) out.textContent = FMT[k](v);
     }
-    saveSettings({ [k]: v });
+    saveSettings({ [k]: v }, el.type === 'checkbox');
   });
 }
 
 // 精确输入倍速（不受滑块步进限制，如 1.333）
 document.getElementById('baseNum').addEventListener('change', (e) => {
   setBase(e.target.value, false);
+});
+
+function selectBaseMode(follow) {
+  cfg.syncPlayer = follow;
+  syncBase();
+  syncModeRows();
+  saveSettings({ syncPlayer: follow }, true);
+}
+document.getElementById('fixedBase').addEventListener('input', (event) => {
+  if (event.target.checked) selectBaseMode(false);
 });
 
 for (const [id, k, lo, hi] of [['rtMaxV', 'rtMax', 1, 16], ['ltMinV', 'ltMin', 0.1, 1], ['rtMaxDeltaV', 'rtMaxDelta', 0.5, 15]]) {
@@ -209,12 +276,18 @@ for (const [id, k, lo, hi] of [['rtMaxV', 'rtMax', 1, 16], ['ltMinV', 'ltMin', 0
     cfg[k] = v;
     if (inputs[k]) inputs[k].value = v;
     el.value = trim(v);
+    syncModeRows();
     saveSettings({ [k]: v });
   });
 }
 
 document.getElementById('reset').addEventListener('click', () => {
-  chrome.storage.sync.set(DEFAULTS, () => { render(DEFAULTS); notifyTab(); });
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  savePending = null;
+  failedSettings = null;
+  render(DEFAULTS);
+  saveSettings(DEFAULTS, true);
 });
 
 // 打开弹窗先确认页面里的脚本还活着：失联就补注入一份新脚本
@@ -224,8 +297,8 @@ notifyTab();
 window.addEventListener('pagehide', flushNow);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushNow(); });
 
-document.getElementById('save').addEventListener('click', (e) => {
-  const btn = e.currentTarget;
-  btn.textContent = '已保存 ✓';
-  setTimeout(() => (btn.textContent = '同步到云'), 1200);
+document.getElementById('save').addEventListener('click', () => {
+  saveStatus('正在保存…');
+  clearTimeout(saveTimer);
+  flushSettings();
 });

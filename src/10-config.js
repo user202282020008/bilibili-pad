@@ -44,8 +44,9 @@ function pullConfig() {
       if (!v) return;
       const b0 = cfg.base, s0 = cfg.syncPlayer, u0 = cfg.subIndex;
       for (const k of Object.keys(DEFAULTS)) if (k in v) cfg[k] = v[k];
+      if (!s0 && cfg.syncPlayer && triggerReturning) playerRate = clampRate(b0);
       if (cfg.base !== b0 || cfg.syncPlayer !== s0) forceBase = true;
-      if (cfg.subIndex !== u0) { applySubState(cfg.subIndex); subApplied = true; }
+      if (cfg.subIndex !== u0) { subApplied = false; subTries = 0; }
     });
   } catch (e) { /* ignore */ }
 }
@@ -55,9 +56,11 @@ function watchConfigChanges() {
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync') return;
+      const b0 = cfg.base, s0 = cfg.syncPlayer;
       for (const k of Object.keys(changes)) if (k in cfg) cfg[k] = changes[k].newValue;
+      if (!s0 && cfg.syncPlayer && triggerReturning) playerRate = clampRate(b0);
       if (changes.base || changes.syncPlayer || changes.useBase) forceBase = true;
-      if (changes.subIndex) { applySubState(cfg.subIndex); subApplied = true; }
+      if (changes.subIndex) { subApplied = false; subTries = 0; }
     });
   } catch (e) { /* ignore */ }
 }

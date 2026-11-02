@@ -4,138 +4,59 @@
 <meta charset="utf-8">
 <title>B站手柄倍速</title>
 <style>
-  :root{
-    --pink:#fb7299; --blue:#00aeec;
-    --bg:#171a21; --card:#1f232c; --card2:#252a35;
-    --line:rgba(255,255,255,.07); --txt:#e8eaf0; --dim:#8b92a0;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;width:286px;background:var(--bg);color:var(--txt);
-    font:12px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-    -webkit-font-smoothing:antialiased}
-  header{display:flex;align-items:center;gap:9px;padding:11px 13px;
-    border-bottom:1px solid var(--line)}
-  header .logo{width:28px;height:28px;border-radius:8px;flex:none;display:block;
-    box-shadow:0 2px 8px rgba(0,174,236,.28)}
-  header h1{margin:0;font-size:13px;font-weight:700;letter-spacing:.2px}
-  header p{margin:1px 0 0;font-size:10px;color:var(--dim)}
-  .sec{padding:10px 13px;border-bottom:1px solid var(--line)}
-  .sec:last-of-type{border-bottom:0}
-  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;height:26px}
-  .row label{font-size:11.5px;color:#cfd4de}
-  .bar{display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 3px}
-  .bar b{font-size:11.5px;font-weight:600;color:#cfd4de}
-  .bar.off{opacity:.4}
-  .val{font-size:11px;color:var(--blue);font-variant-numeric:tabular-nums;
-    background:rgba(0,174,236,.12);border-radius:5px;padding:1px 6px}
-  .val.num{width:64px;text-align:right;border:1px solid rgba(0,174,236,.25);
-    padding:1px 4px;font:inherit;font-size:11px;outline:none}
-  .val.num:focus{border-color:var(--blue)}
-  .hint{margin:0 0 2px;font-size:10px;color:var(--dim);line-height:1.5}
-  input[type=range]{-webkit-appearance:none;width:100%;height:16px;background:none;
-    margin:0 0 4px;cursor:pointer;accent-color:var(--blue)}
-  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;
-    background:rgba(255,255,255,.13)}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;
-    margin-top:-4px;border-radius:50%;background:var(--blue);border:0;
-    box-shadow:0 0 0 2px rgba(0,174,236,.18)}
-  input[type=range]:disabled{opacity:.35;cursor:not-allowed}
-  .sw{position:relative;width:32px;height:18px;flex:none}
-  .sw input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
-  .sw span{position:absolute;inset:0;border-radius:9px;background:#454b58;
-    transition:.18s;pointer-events:none}
-  .sw span::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;
-    border-radius:50%;background:#fff;transition:.18s}
-  .sw input:checked+span{background:var(--blue)}
-  .sw input:checked+span::after{transform:translateX(14px)}
-  .live{display:flex;align-items:center;font-size:10px;color:var(--dim);margin-top:2px}
-  .live b{color:var(--txt);font-variant-numeric:tabular-nums}
-  footer{padding:9px 13px 11px;display:flex;gap:7px}
-  button{flex:1;border:1px solid var(--line);background:var(--card);color:#cfd4de;
-    border-radius:7px;padding:6px 0;font-size:11px;cursor:pointer;font-family:inherit}
-  button:hover{border-color:var(--blue);color:var(--blue)}
-  .tip{padding:8px 13px 10px;font-size:10px;color:var(--dim);line-height:1.6}
+:root{color-scheme:dark;--bg:#10141d;--card:#1a202c;--line:#2b3444;--text:#eef2fa;--muted:#9ba9bf;--blue:#65d0ff;--pink:#ff8eaf}
+*{box-sizing:border-box}body{margin:0;width:370px;height:600px;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:12px/1.6 "Segoe UI","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:17px 18px 12px;flex:none}header img{width:32px;height:32px;border-radius:10px}h1{font-size:16px;line-height:1.4;margin:0;font-weight:650}header p{color:var(--muted);font-size:11px;margin:1px 0 0}.tag{margin-left:auto;font-size:10px;letter-spacing:1px;color:var(--pink);border:1px solid #653a4d;border-radius:5px;padding:2px 6px}
+main{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3b485e transparent;padding:0 14px 14px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;padding:14px}.master{background:linear-gradient(120deg,#202c40,#1a202c);padding:13px 14px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px}.row label{cursor:pointer}.row strong{display:block;font-size:13px;font-weight:600}.hint{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.6}.master .hint{margin:1px 0 0}.always{display:flex;align-items:center;gap:8px;padding:0 5px;margin:0 0 12px;color:var(--muted);font-size:11px}.always b{color:var(--blue);font-size:13px}.dot{width:5px;height:5px;flex:none;border-radius:50%;background:var(--blue)}
+h2{font-size:12px;margin:0 0 10px;font-weight:650}.heading{display:flex;justify-content:space-between;align-items:center}.heading span{font-size:10px;color:var(--muted)}.segments{display:flex;background:#111722;padding:3px;border-radius:8px;margin-bottom:12px}.segments label{position:relative;flex:1;text-align:center;cursor:pointer}.segments input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}.segments span{display:block;border-radius:6px;padding:6px;font-size:11px}.segments input:checked+span{background:#2b3c53;color:var(--blue);box-shadow:0 1px 3px #0003}.segments input:focus-visible+span,.sw input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:5px 0}.bar label{font-size:11px;color:#cbd5e6}.off{opacity:.45}.num{width:72px;border:1px solid #40516b;border-radius:6px;background:#121b2a;color:var(--blue);padding:4px 6px;text-align:right;font:600 12px "Segoe UI",sans-serif}.num:focus{outline:2px solid var(--blue);outline-offset:1px}input:disabled{cursor:not-allowed;opacity:.5}.rate-unit{font-size:11px;color:var(--muted);margin-left:4px}.live{display:flex;align-items:baseline;justify-content:space-between;padding:3px 0 1px;color:var(--muted);font-size:11px}.live b{font-size:27px;font-weight:600;line-height:1.2;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-1px}input[type=range]{display:block;width:100%;height:18px;margin:6px 0 8px;accent-color:var(--blue);cursor:pointer}
+.sw{position:relative;width:34px;height:20px;flex:none;display:inline-block}.sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}.sw span{position:absolute;inset:0;border-radius:20px;background:#465269;pointer-events:none;transition:background .15s}.sw span::after{content:"";position:absolute;width:14px;height:14px;top:3px;left:3px;background:white;border-radius:50%;transition:transform .15s}.sw input:checked+span{background:#299fca}.sw input:checked+span::after{transform:translateX(14px)}
+details.card{padding:0}summary{cursor:pointer;padding:13px 14px;font-weight:600;list-style:none;display:flex;align-items:center;justify-content:space-between}summary::-webkit-details-marker{display:none}summary::after{content:"＋";color:var(--muted);font-size:15px;font-weight:400}details[open]>summary::after{content:"−"}summary:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;border-radius:8px}.detail-body{padding:0 14px 14px}.divider{height:1px;background:var(--line);margin:12px 0}.key{display:inline-block;min-width:37px;color:var(--blue);font-size:11px;font-weight:600}.mapping .row{min-height:35px;border-bottom:1px solid #283142}.mapping .row:last-of-type{border:0}.value{color:var(--blue);font-variant-numeric:tabular-nums;font-size:11px}
+footer{flex:none;border-top:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:10px;background:#141a25}#saveStatus{flex:1;color:var(--muted);font-size:10px}#saveStatus[data-state=error]{color:var(--pink)}button{font:inherit;cursor:pointer;border:1px solid #3d4d65;background:#202b3d;color:var(--text);padding:4px 9px;border-radius:6px}button:hover{border-color:var(--blue)}#reset{border:0;background:none;color:var(--muted);font-size:10px;padding:4px 0}[hidden]{display:none!important}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-  <header>
-    <img class="logo" src="icons/icon48.png" alt="" width="28" height="28">
-    <div>
-      <h1>B站手柄倍速</h1>
-      <p>手柄扳机力度 → 视频倍速</p>
-    </div>
-  </header>
-
-  <div class="sec">
-    <div class="row"><label for="enabled">启用</label>
-      <span class="sw"><input type="checkbox" id="enabled"><span></span></span></div>
-    <div class="row"><label for="swap">交换 LT / RT</label>
-      <span class="sw"><input type="checkbox" id="swap"><span></span></span></div>
-    <div class="row"><label for="hud">画面倍速提示</label>
-      <span class="sw"><input type="checkbox" id="hud"><span></span></span></div>
-    <div class="row"><label for="dpadVol">方向键 ↑↓ 调音量</label>
-      <span class="sw"><input type="checkbox" id="dpadVol"><span></span></span></div>
-    <div class="row"><label for="dpadRate">方向键 ←→ 调默认倍速</label>
-      <span class="sw"><input type="checkbox" id="dpadRate"><span></span></span></div>
-    <div class="row"><label for="lbPause">左肩键 L1 暂停/继续</label>
-      <span class="sw"><input type="checkbox" id="lbPause"><span></span></span></div>
-    <div class="row"><label for="abSeek">A / B 快退快进（连按递增）</label>
-      <span class="sw"><input type="checkbox" id="abSeek"><span></span></span></div>
-    <div class="row"><label for="rbSub">右肩键 R1 循环字幕</label>
-      <span class="sw"><input type="checkbox" id="rbSub"><span></span></span></div>
-    <div class="row"><label for="r3Dm">R3 弹幕开关</label>
-      <span class="sw"><input type="checkbox" id="r3Dm"><span></span></span></div>
-    <div class="row"><label for="xWide">X 键 宽屏</label>
-      <span class="sw"><input type="checkbox" id="xWide"><span></span></span></div>
-    <div class="row"><label for="yFull">Y 键 全屏</label>
-      <span class="sw"><input type="checkbox" id="yFull"><span></span></span></div>
-    <div class="row"><label for="yCycle">Y 键循环播放模式</label>
-      <span class="sw"><input type="checkbox" id="yCycle"><span></span></span></div>
-    <div class="hint">开启后 Y 在 默认 → 宽屏 → 网页全屏 → 全屏 间循环（替代全屏开关，需「Y 键 全屏」保持开启）。</div>
-  </div>
-
-  <div class="sec">
-    <div class="row"><label for="syncPlayer">跟随播放器倍速</label>
-      <span class="sw"><input type="checkbox" id="syncPlayer"><span></span></span></div>
-    <div class="bar" id="baseRow"><b>默认倍速</b><input class="val num" id="baseNum" type="number" min="0.25" max="8" step="0.001"></div>
-    <input type="range" id="base" min="0.5" max="4" step="0.01">
-    <div class="live">网页播放器当前：<b id="playerRateV">—</b></div>
-    <div class="hint">开启（默认）：在播放器里改倍速，默认倍速立刻跟着变，滑块实时显示它；
-      关闭：用上面的值（可精确输入，如 1.333）作为默认倍速并持续生效。</div>
-  </div>
-
-  <div class="sec">
-    <div class="row"><label for="rtMaxRel">RT 上限 = 默认倍速 + 偏移</label>
-      <span class="sw"><input type="checkbox" id="rtMaxRel"><span></span></span></div>
-    <div class="bar" id="rtMaxDeltaRow"><b>偏移量</b><input class="val num" id="rtMaxDeltaV" type="number" min="0.5" max="15" step="0.1"></div>
-    <input type="range" id="rtMaxDelta" min="0.5" max="15" step="0.5">
-    <div class="hint">开启后 RT 全力 = 当前默认倍速 + 偏移量（如 1x + 3 = 4x），跟随默认倍速变化；关闭则用下方固定值。</div>
-
-    <div class="bar" id="rtMaxRow"><b>RT 全力 = 最快</b><input class="val num" id="rtMaxV" type="number" min="1" max="16" step="0.001"></div>
-    <input type="range" id="rtMax" min="1.25" max="6" step="0.01">
-
-    <div class="row"><label for="ltAccel">LT 也加速（与 RT 叠加）</label>
-      <span class="sw"><input type="checkbox" id="ltAccel"><span></span></span></div>
-    <div class="bar" id="ltMinRow"><b>LT 全力 = 最慢</b><input class="val num" id="ltMinV" type="number" min="0.1" max="1" step="0.001"></div>
-    <input type="range" id="ltMin" min="0.1" max="1" step="0.01">
-
-    <div class="bar"><b>死区</b><span class="val" id="deadzoneV"></span></div>
-    <input type="range" id="deadzone" min="0" max="0.3" step="0.01">
-
-    <div class="bar"><b>平滑</b><span class="val" id="smoothV"></span></div>
-    <input type="range" id="smooth" min="0" max="0.5" step="0.01">
-  </div>
-
-  <div class="tip">
-    手柄需先按一下任意键让浏览器识别。LT / RT 同按按差值计算；
-    松开扳机回到默认倍速（自定义值，或播放器自身倍速）。
-  </div>
-
-  <footer>
-    <button id="reset">恢复默认</button>
-    <button id="save">同步到云</button>
-  </footer>
-
-  <script src="popup.js"></script>
+<header><img src="icons/icon48.png" alt="" width="32" height="32"><div><h1>B站手柄倍速</h1><p>跟着自己的节奏看视频</p></div><span class="tag">PLAYER</span></header>
+<main>
+<section class="card master" aria-label="总开关"><div class="row"><label for="enabled"><strong>手柄与自动倍速</strong><span class="hint" id="enabledHint">已开启 · 设置即时生效</span></label><span class="sw"><input type="checkbox" id="enabled"><span></span></span></div></section>
+<div class="always"><span class="dot"></span><b>3.0x</b><span>播放器菜单始终可用，无需开启手柄控制</span></div>
+<section class="card" aria-labelledby="baseTitle">
+<div class="heading"><h2 id="baseTitle">默认倍速</h2><span>松开扳机后恢复</span></div>
+<div class="segments" role="group" aria-label="默认倍速模式"><label><input type="radio" name="baseMode" id="syncPlayer" value="follow"><span>跟随播放器</span></label><label><input type="radio" name="baseMode" id="fixedBase" value="fixed"><span>固定倍速</span></label></div>
+<div class="live" id="followRate"><span>播放器基准倍速</span><b id="playerRateV">—</b></div>
+<div id="fixedRate" hidden><div class="bar" id="baseRow"><label for="baseNum">固定值</label><div><input class="num" id="baseNum" type="number" min="0.25" max="8" step="0.001"><span class="rate-unit">x</span></div></div><input type="range" id="base" min="0.25" max="8" step="0.01" aria-label="固定默认倍速"></div>
+<p class="hint" id="baseHint">在播放器中选择倍速，扳机只做临时加减速。</p>
+</section>
+<details class="card" open><summary>扳机设置</summary><div class="detail-body">
+<div class="row"><label for="rtMaxRel">RT 上限随默认倍速增加</label><span class="sw"><input type="checkbox" id="rtMaxRel"><span></span></span></div>
+<div id="fixedCap"><div class="bar" id="rtMaxRow"><label for="rtMaxV">RT · 加速上限</label><div><input class="num" id="rtMaxV" type="number" min="1" max="16" step="0.001"><span class="rate-unit">x</span></div></div><input type="range" id="rtMax" min="1" max="16" step="0.01" aria-label="RT 加速上限"></div>
+<div id="relativeCap" hidden><div class="bar" id="rtMaxDeltaRow"><label for="rtMaxDeltaV">在默认倍速上增加</label><div><input class="num" id="rtMaxDeltaV" type="number" min="0.5" max="15" step="0.1"><span class="rate-unit">x</span></div></div><input type="range" id="rtMaxDelta" min="0.5" max="15" step="0.5" aria-label="RT 倍速偏移量"></div>
+<p class="hint" id="capHint">按得越深越快，最高不低于默认倍速。</p><div class="divider"></div>
+<div class="row"><label for="ltAccel">LT 也用于加速</label><span class="sw"><input type="checkbox" id="ltAccel"><span></span></span></div>
+<div id="slowRate"><div class="bar" id="ltMinRow"><label for="ltMinV">LT · 慢放下限</label><div><input class="num" id="ltMinV" type="number" min="0.1" max="1" step="0.001"><span class="rate-unit">x</span></div></div><input type="range" id="ltMin" min="0.1" max="1" step="0.01" aria-label="LT 慢放下限"></div>
+<p class="hint" id="ltHint">LT 减速、RT 加速；同时按下时按力度差计算。</p>
+</div></details>
+<details class="card"><summary>按键映射</summary><div class="detail-body mapping">
+<div class="row"><label for="dpadVol"><span class="key">↑ ↓</span>调节音量</label><span class="sw"><input type="checkbox" id="dpadVol"><span></span></span></div>
+<div class="row"><label for="dpadRate"><span class="key">← →</span>默认倍速 ±0.25x</label><span class="sw"><input type="checkbox" id="dpadRate"><span></span></span></div>
+<div class="row"><label for="lbPause"><span class="key">L1</span>暂停 / 继续</label><span class="sw"><input type="checkbox" id="lbPause"><span></span></span></div>
+<div class="row"><label for="rbSub"><span class="key">R1</span>循环切换字幕</label><span class="sw"><input type="checkbox" id="rbSub"><span></span></span></div>
+<div class="row"><label for="abSeek"><span class="key">A / B</span>快退 / 快进</label><span class="sw"><input type="checkbox" id="abSeek"><span></span></span></div>
+<div class="row"><label for="r3Dm"><span class="key">R3</span>开关弹幕</label><span class="sw"><input type="checkbox" id="r3Dm"><span></span></span></div>
+<div class="row"><label for="xWide"><span class="key">X</span>宽屏模式</label><span class="sw"><input type="checkbox" id="xWide"><span></span></span></div>
+<div class="row"><label for="yFull"><span class="key">Y</span>全屏模式</label><span class="sw"><input type="checkbox" id="yFull"><span></span></span></div>
+<div class="row"><label for="yCycle"><span class="key">Y</span>改为循环播放模式</label><span class="sw"><input type="checkbox" id="yCycle"><span></span></span></div>
+<p class="hint">A / B 首次跳转 5 秒，1 秒内连按逐次增加。Y 循环：默认 → 宽屏 → 网页全屏 → 全屏。</p>
+</div></details>
+<details class="card"><summary>手感与显示</summary><div class="detail-body">
+<div class="row"><label for="swap">交换 LT / RT</label><span class="sw"><input type="checkbox" id="swap"><span></span></span></div>
+<div class="row"><label for="hud">画面倍速提示</label><span class="sw"><input type="checkbox" id="hud"><span></span></span></div><div class="divider"></div>
+<div class="bar"><label for="deadzone">扳机死区</label><span class="value" id="deadzoneV"></span></div><input type="range" id="deadzone" min="0" max="0.5" step="0.01"><p class="hint">忽略轻触与抖动；数值越大，越需要按深才响应。</p>
+<div class="bar"><label for="smooth">倍速过渡时间</label><span class="value" id="smoothV"></span></div><input type="range" id="smooth" min="0" max="0.5" step="0.01"><p class="hint">0 表示立即切换；数值越大，变速越平缓。</p>
+</div></details>
+<p class="hint">连接手柄后，先按一下任意键让浏览器识别。设置自动保存，原有配置会继续保留。</p>
+</main>
+<footer><span id="saveStatus" role="status" aria-live="polite">设置自动保存</span><button id="save" hidden>重试保存</button><button id="reset">恢复默认</button></footer>
+<script src="popup.js"></script>
 </body>
 </html>

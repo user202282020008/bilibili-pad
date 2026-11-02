@@ -28,7 +28,8 @@ function updateBaseRate(now) {
     if (cfg.enabled && !cfg.syncPlayer) applyBase(true);
     else {
       // 切到同步模式：以当前实际倍速为起点，之后跟随播放器的改动
-      playerRate = cur = expected = clampRate(video.playbackRate);
+      // 扳机仍在临时调速时，不能把瞬时加速值认成新的基准。
+      if (!triggerReturning) playerRate = cur = expected = clampRate(video.playbackRate);
       reportPlayerRate();
     }
   }
@@ -67,6 +68,7 @@ function calculateTargetRate(rt, lt, active) {
 
   // 只有在启用且有手柄连接时才处理扳机输入
   triggerHeld = cfg.enabled && active && activePadId && (rt > dz || lt > dz);
+  if (triggerHeld) triggerReturning = true;
 
   if (cfg.enabled && active && activePadId) {
     // 可调上限模式：RT 全力 = 默认倍速 + 偏移量；否则用固定值
@@ -101,10 +103,9 @@ function applyPlaybackRate(target, dt, active) {
   // 只在「启用 + 手柄连接 + 正在扣扳机 / 松手后正在回归基准」时接管倍速；
   // 自定义默认倍速（关闭同步）时额外持续守住。其余时间交还给播放器，
   // 否则手柄一插着就会把播放器菜单里设的倍速覆盖掉。
-  const settling = Math.abs(cur - target) > 0.004;
   // kbdBoost：键盘长按 → 官方加速期间不接管，避免把播放器的临时倍速盖掉
   const canWrite = cfg.enabled && !kbdBoost
-    && ((activePadId && active && (triggerHeld || settling)) || !cfg.syncPlayer);
+    && (triggerHeld || triggerReturning || !cfg.syncPlayer);
   const w = q2(cur);   // 写入值量化到两位，B 站的倍速显示才不会变成一长串
 
   if (canWrite && Math.abs(w - video.playbackRate) > 0.004) {
@@ -113,6 +114,10 @@ function applyPlaybackRate(target, dt, active) {
     // 不接管时，跟随视频的真实倍速，避免下次接管时从错误的值起步
     cur = expected = clampRate(video.playbackRate);
   }
+  // 包含关闭平滑和手柄断开：写完准确的基准值后才能交还播放器。
+  if (canWrite && !triggerHeld && Math.abs(w - q2(target)) < 0.004) {
+    triggerReturning = false;
+  }
 
   // 跟随模式且空闲：播放器里的倍速一变就实时成为新的默认倍速
   // （不只依赖 ratechange，轮询兜住播放器改了但没派发事件的情况）
@@ -120,22 +125,12 @@ function applyPlaybackRate(target, dt, active) {
     const r = clampRate(video.playbackRate);
     if (Math.abs(r - playerRate) > 0.004) {
       playerRate = r;
+      restoreRate = r;
       cur = expected = r;
       reportPlayerRate();
     }
   }
 
-  // 跟随模式下，松手回到基准后，强制同步 playerRate
-  // 避免量化误差累积导致的漂移（如 1.00 -> 0.99 -> 0.98...）
-  // 注意：只在完全稳定后才修正，避免干扰正常的扳机控制
-  if (cfg.syncPlayer && cfg.enabled && activePadId && !kbdBoost && !triggerHeld && !settling && !active) {
-    const actual = clampRate(video.playbackRate);
-    if (Math.abs(actual - playerRate) > 0.01) {
-      playerRate = actual;
-      cur = expected = actual;
-      reportPlayerRate();
-    }
-  }
 }
 
 // 处理所有按键输入
@@ -209,6 +204,13 @@ function frame(now) {
 
   // 检测播放器连接
   if (!updatePlayerConnection()) return;
+  updateEnabledState();
+  if (scanTick % SCAN_INTERVAL === 0) updateSpeedMenu();
+  if (!cfg.enabled) {
+    restoreRate = playerRate = cur = expected = clampRate(video.playbackRate);
+    reportPlayerRate();
+    return;
+  }
 
   // 处理默认倍速变更
   updateBaseRate(now);

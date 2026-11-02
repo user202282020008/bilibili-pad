@@ -113,6 +113,10 @@ let cur = 1;             // 平滑后的当前值
 let forceBase = false;   // 默认倍速设置改动后需立刻写入
 let writeAt = -1e9;      // 最近一次写入倍速的时间戳（用来判断是谁改的倍速）
 let triggerHeld = false; // 当前是否有扳机输入
+let triggerReturning = false; // 扳机松开后仍需把最后一帧准确写回基准
+let playbackEnabled = true;   // 已应用的启用状态，用于处理开关边沿
+let restoreRate = 1;          // 扩展接管前（或用户在播放器中选择）的倍速
+let rateOwned = false;        // 扩展是否写过当前视频的倍速
 let kbdBoost = false;    // 键盘正长按 →（B 站官方临时加速），期间让出倍速控制权
 let lastActivity = -1e9;
 
